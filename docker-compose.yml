@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  mysql:
+    build:
+      context: ./mysql
+      dockerfile: Dockerfile  # MySQL Dockerfile located in ./mysql folder
+    container_name: mysql_db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: insurance_app
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_password
+    ports:
+      - "3306:3306"  # Expose MySQL port
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - webnet
+
+  nodejs:
+    build:
+      context: ./nodejs
+      dockerfile: Dockerfile  # Node.js Dockerfile located in ./nodejs folder
+    container_name: my-nodejs
+    ports:
+      - "3000:3000"  # Expose Node.js app on port 3000
+    environment:
+      DB_HOST: mysql
+      DB_USER: app_user
+      DB_PASSWORD: app_password
+      DB_NAME: insurance_app
+    depends_on:
+      - mysql
+    networks:
+      - webnet
+
+  nginx:
+    build:
+      context: ./nginx
+    container_name: nginx_proxy
+    ports:
+      - "80:80"
+    depends_on:
+      - nodejs
+    volumes:
+      - ./dashboard:/usr/share/nginx/html
+    networks:
+      - webnet
+    # Ensure Nginx waits for Node.js to be ready
+    command: /bin/sh -c "until nc -z nodejs 3000; do echo 'Waiting for Node.js...'; sleep 2; done; nginx -g 'daemon off;'"
+  
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: dashboard-container
+    ports:
+      - "3001:3001"  # Ensure this port is correct
+    environment:
+      DB_HOST: mysql
+      DB_USER: app_user
+      DB_PASSWORD: app_password
+      DB_NAME: insurance_app
+    depends_on:
+      - mysql
+    networks:
+      - webnet
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  webnet:
+    driver: bridge
